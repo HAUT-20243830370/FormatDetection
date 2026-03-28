@@ -996,6 +996,580 @@ def check_paragraph_spacing_after(doc):
     return len(errors) == 0
 
 
+def check_body_font_size(doc):
+    print('\n' + '=' * 80)
+    print('【正文字体大小和行距检测】')
+    print('=' * 80)
+    
+    errors = []
+    ns = {'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'}
+    
+    import re
+    
+    root = doc.element.body
+    for i, p_elem in enumerate(root.findall('.//w:p', namespaces=ns)):
+        text_parts = []
+        for t in p_elem.findall('.//w:t', namespaces=ns):
+            if t.text:
+                text_parts.append(t.text)
+        text = ''.join(text_parts)
+        
+        if not text:
+            continue
+        
+        if i < 100:
+            continue
+        
+        if (text.startswith('第') and '章' in text) or \
+           (text.startswith(('1', '2', '3', '4', '5', '6', '7', '8', '9')) and ' ' in text[:10]) or \
+           (text.startswith('摘要') or text.startswith('Abstract') or 
+            text.startswith('关键词') or text.startswith('Keywords') or
+            text.startswith('参考文献') or text.startswith('参 考 文 献') or
+            text.startswith('致 谢') or text.startswith('致谢') or
+            text.startswith('结 论') or text.startswith('结论') or
+            text.startswith('摘  要') or text.startswith('主要可视化图表')):
+            continue
+        
+        if text.startswith('图 ') or text.startswith('表 ') or re.match(r'^\d+\.\d+', text):
+            continue
+        
+        if re.match(r'^\[\d+\]', text):
+            continue
+        
+        pPr = p_elem.find('./w:pPr', namespaces=ns)
+        if pPr is not None:
+            spacing = pPr.find('./w:spacing', namespaces=ns)
+            if spacing is not None:
+                line = spacing.get(f'{{{ns["w"]}}}line')
+                lineRule = spacing.get(f'{{{ns["w"]}}}lineRule')
+                if line is not None:
+                    line_val = float(line) / 240.0
+                    if abs(line_val - 1.5) > 0.01:
+                        errors.append({
+                            'paragraph': i + 1,
+                            'text': text[:80],
+                            'type': '行距错误',
+                            'actual': f'{line_val:.1f} 倍',
+                            'expected': '1.5 倍'
+                        })
+        
+        r_elems = p_elem.findall('./w:r', namespaces=ns)
+        for j, r_elem in enumerate(r_elems):
+            t_elems = r_elem.findall('./w:t', namespaces=ns)
+            run_text = ''.join([t.text for t in t_elems if t.text])
+            
+            if not run_text.strip():
+                continue
+            
+            rPr = r_elem.find('./w:rPr', namespaces=ns)
+            if rPr is not None:
+                sz = rPr.find('./w:sz', namespaces=ns)
+                rFonts = rPr.find('./w:rFonts', namespaces=ns)
+                
+                if sz is not None:
+                    sz_val = float(sz.get(f'{{{ns["w"]}}}val')) / 2.0
+                    if abs(sz_val - 12.0) > 0.1:
+                        has_chinese = any('\u4e00' <= char <= '\u9fff' for char in run_text)
+                        if has_chinese:
+                            errors.append({
+                                'paragraph': i + 1,
+                                'text': text[:80],
+                                'type': '字体大小错误',
+                                'actual': f'{sz_val:.1f} 磅',
+                                'expected': '12.0 磅 (小4号)'
+                            })
+                
+                if rFonts is not None:
+                    eastAsia = rFonts.get(f'{{{ns["w"]}}}eastAsia')
+                    ascii_font = rFonts.get(f'{{{ns["w"]}}}ascii')
+                    
+                    has_chinese = any('\u4e00' <= char <= '\u9fff' for char in run_text)
+                    has_english = any('a' <= char <= 'z' or 'A' <= char <= 'Z' for char in run_text)
+                    
+                    if has_chinese and eastAsia and eastAsia != '宋体':
+                        errors.append({
+                            'paragraph': i + 1,
+                            'text': text[:80],
+                            'type': '中文字体错误',
+                            'actual': eastAsia,
+                            'expected': '宋体'
+                        })
+                    
+                    if has_english and ascii_font and 'Times New Roman' not in ascii_font:
+                        errors.append({
+                            'paragraph': i + 1,
+                            'text': text[:80],
+                            'type': '英文字体错误',
+                            'actual': ascii_font,
+                            'expected': 'Times New Roman'
+                        })
+    
+    if errors:
+        print(f'\n发现 {len(errors)} 个正文字体大小和行距问题:\n')
+        for i, error in enumerate(errors, 1):
+            print(f'\n{i}. 段落 {error["paragraph"]}:')
+            print(f'   内容: {error["text"]}...')
+            print(f'   类型: {error["type"]}')
+            print(f'   实际: {error["actual"]}')
+            print(f'   期望: {error["expected"]}')
+    else:
+        print(f'\n✅ 所有正文字体大小和行距检查通过！')
+    
+    return len(errors) == 0
+
+
+def check_table_figure_font(doc):
+    print('\n' + '=' * 80)
+    print('【表格和插图字体检测】')
+    print('=' * 80)
+    
+    errors = []
+    ns = {'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'}
+    
+    for table_idx, table in enumerate(doc.tables):
+        for row_idx, row in enumerate(table.rows):
+            for cell_idx, cell in enumerate(row.cells):
+                for para_idx, para in enumerate(cell.paragraphs):
+                    if not para.text.strip():
+                        continue
+                    
+                    para_elem = para._element
+                    r_elems = para_elem.findall('.//w:r', namespaces=ns)
+                    for r_elem in r_elems:
+                        t_elems = r_elem.findall('./w:t', namespaces=ns)
+                        run_text = ''.join([t.text for t in t_elems if t.text])
+                        
+                        if not run_text.strip():
+                            continue
+                        
+                        rPr = r_elem.find('./w:rPr', namespaces=ns)
+                        if rPr is not None:
+                            sz = rPr.find('./w:sz', namespaces=ns)
+                            rFonts = rPr.find('./w:rFonts', namespaces=ns)
+                            
+                            if sz is not None:
+                                sz_val = float(sz.get(f'{{{ns["w"]}}}val')) / 2.0
+                                if abs(sz_val - 10.5) > 0.1:
+                                    has_chinese = any('\u4e00' <= char <= '\u9fff' for char in run_text)
+                                    if has_chinese:
+                                        errors.append({
+                                            'table': table_idx + 1,
+                                            'cell': f'({row_idx+1},{cell_idx+1})',
+                                            'text': para.text[:60],
+                                            'type': '字体大小错误',
+                                            'actual': f'{sz_val:.1f} 磅',
+                                            'expected': '10.5 磅 (5号)'
+                                        })
+                            
+                            if rFonts is not None:
+                                eastAsia = rFonts.get(f'{{{ns["w"]}}}eastAsia')
+                                ascii_font = rFonts.get(f'{{{ns["w"]}}}ascii')
+                                
+                                has_chinese = any('\u4e00' <= char <= '\u9fff' for char in run_text)
+                                has_english = any('a' <= char <= 'z' or 'A' <= char <= 'Z' for char in run_text)
+                                
+                                if has_chinese and eastAsia and eastAsia != '宋体':
+                                    errors.append({
+                                        'table': table_idx + 1,
+                                        'cell': f'({row_idx+1},{cell_idx+1})',
+                                        'text': para.text[:60],
+                                        'type': '中文字体错误',
+                                        'actual': eastAsia,
+                                        'expected': '宋体'
+                                    })
+                                
+                                if has_english and ascii_font and 'Times New Roman' not in ascii_font:
+                                    errors.append({
+                                        'table': table_idx + 1,
+                                        'cell': f'({row_idx+1},{cell_idx+1})',
+                                        'text': para.text[:60],
+                                        'type': '英文字体错误',
+                                        'actual': ascii_font,
+                                        'expected': 'Times New Roman'
+                                    })
+    
+    if errors:
+        print(f'\n发现 {len(errors)} 个表格字体问题:\n')
+        for i, error in enumerate(errors, 1):
+            print(f'\n{i}. 表格 {error["table"]} 单元格 {error["cell"]}:')
+            print(f'   内容: {error["text"]}...')
+            print(f'   类型: {error["type"]}')
+            print(f'   实际: {error["actual"]}')
+            print(f'   期望: {error["expected"]}')
+    else:
+        print(f'\n✅ 所有表格和插图字体检查通过！')
+    
+    return len(errors) == 0
+
+
+def check_reference_count(doc):
+    print('\n' + '=' * 80)
+    print('【参考文献数量检测】')
+    print('=' * 80)
+    
+    import re
+    
+    reference_count = 0
+    in_references = False
+    
+    for i, para in enumerate(doc.paragraphs):
+        text = para.text.strip()
+        
+        if '参考文献' in text or '参 考 文 献' in text:
+            in_references = True
+            continue
+        
+        if in_references:
+            if re.match(r'^\[\d+\]', text):
+                reference_count += 1
+            
+            if text.startswith('致谢') or text.startswith('致 谢') or text.startswith('结 论') or text.startswith('结论'):
+                break
+    
+    print(f'\n找到参考文献数量: {reference_count}')
+    
+    if reference_count >= 6:
+        print(f'✅ 参考文献数量检查通过！')
+        return True
+    else:
+        print(f'❌ 参考文献数量不足，要求不低于6个，实际{reference_count}个')
+        return False
+
+
+def check_special_headings(doc):
+    print('\n' + '=' * 80)
+    print('【特殊标题格式检测】')
+    print('=' * 80)
+    
+    errors = []
+    ns = {'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'}
+    
+    target_configs = [
+        {'name': '结  论', 'patterns': ['结  论', '结 论', '结论']},
+        {'name': '致 谢', 'patterns': ['致 谢', '致谢']},
+        {'name': '参 考 文 献', 'patterns': ['参 考 文 献', '参 考 文 献', '参考文献']}
+    ]
+    
+    all_paras = list(doc.paragraphs)
+    
+    for config in target_configs:
+        found = False
+        for i, para in enumerate(all_paras):
+            text = para.text.strip()
+            if any(text == pattern for pattern in config['patterns']):
+                found = True
+                print(f'\n检测到「{config["name"]}」(段落 {i+1}): {text}')
+                
+                para_elem = para._element
+                pPr = para_elem.find('./w:pPr', namespaces=ns)
+                
+                jc_ok = False
+                if pPr is not None:
+                    jc = pPr.find('./w:jc', namespaces=ns)
+                    if jc is not None:
+                        val = jc.get(f'{{{ns["w"]}}}val')
+                        if val == 'center':
+                            jc_ok = True
+                            print(f'  ✅ 对齐方式: 居中')
+                        else:
+                            errors.append({
+                                'heading': config["name"],
+                                'type': '对齐方式错误',
+                                'actual': val,
+                                'expected': 'center'
+                            })
+                            print(f'  ❌ 对齐方式: {val} (期望: center)')
+                    else:
+                        errors.append({
+                            'heading': config["name"],
+                            'type': '对齐方式错误',
+                            'actual': '未设置',
+                            'expected': 'center'
+                        })
+                        print(f'  ❌ 对齐方式: 未设置 (期望: center)')
+                else:
+                    errors.append({
+                        'heading': config["name"],
+                        'type': '对齐方式错误',
+                        'actual': '未设置',
+                        'expected': 'center'
+                    })
+                    print(f'  ❌ 对齐方式: 未设置 (期望: center)')
+                
+                font_ok = False
+                sz_printed = False
+                eastAsia_printed = False
+                for run in para.runs:
+                    if run.text.strip():
+                        r_elem = run._element
+                        rPr = r_elem.find('./w:rPr', namespaces=ns)
+                        if rPr is not None:
+                            sz = rPr.find('./w:sz', namespaces=ns)
+                            rFonts = rPr.find('./w:rFonts', namespaces=ns)
+                            
+                            if sz is not None and not sz_printed:
+                                sz_printed = True
+                                sz_val = float(sz.get(f'{{{ns["w"]}}}val')) / 2.0
+                                if abs(sz_val - 15.0) < 0.1:
+                                    print(f'  ✅ 字体大小: {sz_val:.1f} 磅 (小3号)')
+                                else:
+                                    errors.append({
+                                        'heading': config["name"],
+                                        'type': '字体大小错误',
+                                        'actual': f'{sz_val:.1f} 磅',
+                                        'expected': '15.0 磅 (小3号)'
+                                    })
+                                    print(f'  ❌ 字体大小: {sz_val:.1f} 磅 (期望: 15.0 磅)')
+                            
+                            if rFonts is not None and not eastAsia_printed:
+                                eastAsia = rFonts.get(f'{{{ns["w"]}}}eastAsia')
+                                if eastAsia:
+                                    eastAsia_printed = True
+                                    if eastAsia == '黑体':
+                                        font_ok = True
+                                        print(f'  ✅ 中文字体: 黑体')
+                                    else:
+                                        errors.append({
+                                            'heading': config["name"],
+                                            'type': '中文字体错误',
+                                            'actual': eastAsia,
+                                            'expected': '黑体'
+                                        })
+                                        print(f'  ❌ 中文字体: {eastAsia} (期望: 黑体)')
+                                elif not eastAsia_printed:
+                                    eastAsia_printed = True
+                                    errors.append({
+                                        'heading': config["name"],
+                                        'type': '中文字体错误',
+                                        'actual': '未设置',
+                                        'expected': '黑体'
+                                    })
+                                    print(f'  ❌ 中文字体: 未设置 (期望: 黑体)')
+                
+                empty_lines_before = 0
+                for j in range(i-1, max(0, i-10), -1):
+                    if not all_paras[j].text.strip():
+                        empty_lines_before += 1
+                    else:
+                        break
+                
+                if empty_lines_before >= 2:
+                    print(f'  ✅ 段前空行数: {empty_lines_before} 行')
+                else:
+                    errors.append({
+                        'heading': config["name"],
+                        'type': '段前空行错误',
+                        'actual': f'{empty_lines_before} 行',
+                        'expected': '≥2 行'
+                    })
+                    print(f'  ❌ 段前空行数: {empty_lines_before} 行 (期望: ≥2 行)')
+                
+                break
+        
+        if not found:
+            errors.append({
+                'heading': config["name"],
+                'type': '未找到标题',
+                'actual': '未找到',
+                'expected': '存在'
+            })
+            print(f'\n❌ 未找到「{config["name"]}」标题')
+    
+    if errors:
+        print(f'\n发现 {len(errors)} 个特殊标题问题:\n')
+        for i, error in enumerate(errors, 1):
+            print(f'\n{i}. 「{error["heading"]}」:')
+            print(f'   类型: {error["type"]}')
+            print(f'   实际: {error["actual"]}')
+            print(f'   期望: {error["expected"]}')
+        return False
+    else:
+        print(f'\n✅ 所有特殊标题格式检查通过！')
+        return True
+
+
+def check_body_headings(doc):
+    print('\n' + '=' * 80)
+    print('【正文标题格式检测】')
+    print('=' * 80)
+    
+    errors = []
+    ns = {'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'}
+    
+    h1_pattern = re.compile(r'^(\d+)\s+[\u4e00-\u9fa5]')
+    h2_pattern = re.compile(r'^(\d+)\.(\d+)\s+[\u4e00-\u9fa5]')
+    
+    for i, para in enumerate(doc.paragraphs):
+        text = para.text.strip()
+        
+        if not text:
+            continue
+        
+        is_h1 = h1_pattern.match(text)
+        is_h2 = h2_pattern.match(text)
+        
+        if not is_h1 and not is_h2:
+            continue
+        
+        heading_level = '一级标题' if is_h1 else '二级标题'
+        expected_font_size = 15.0 if is_h1 else 14.0
+        print(f'\n检测到「{heading_level}」(段落 {i+1}): {text}')
+        
+        para_elem = para._element
+        pPr = para_elem.find('./w:pPr', namespaces=ns)
+        
+        if is_h1:
+            if pPr is not None:
+                spacing = pPr.find('./w:spacing', namespaces=ns)
+                if spacing is not None:
+                    before = spacing.get(f'{{{ns["w"]}}}before')
+                    after = spacing.get(f'{{{ns["w"]}}}after')
+                    before_lines = float(before) / 240.0 if before else 0.0
+                    after_lines = float(after) / 240.0 if after else 0.0
+                    
+                    if abs(before_lines - 0.5) < 0.1:
+                        print(f'  ✅ 段前间距: {before_lines:.1f} 行')
+                    else:
+                        errors.append({
+                            'paragraph': i + 1,
+                            'text': text,
+                            'heading_level': heading_level,
+                            'type': '段前间距错误',
+                            'actual': f'{before_lines:.1f} 行',
+                            'expected': '0.5 行'
+                        })
+                        print(f'  ❌ 段前间距: {before_lines:.1f} 行 (期望: 0.5 行)')
+                    
+                    if abs(after_lines - 0.5) < 0.1:
+                        print(f'  ✅ 段后间距: {after_lines:.1f} 行')
+                    else:
+                        errors.append({
+                            'paragraph': i + 1,
+                            'text': text,
+                            'heading_level': heading_level,
+                            'type': '段后间距错误',
+                            'actual': f'{after_lines:.1f} 行',
+                            'expected': '0.5 行'
+                        })
+                        print(f'  ❌ 段后间距: {after_lines:.1f} 行 (期望: 0.5 行)')
+        
+        font_ok = False
+        sz_printed = False
+        eastAsia_printed = False
+        bold_ok = False
+        bold_printed = False
+        
+        def is_style_bold(style):
+            if style is None:
+                return False
+            style_elem = style._element
+            rPr = style_elem.find('./w:rPr', namespaces=ns)
+            if rPr is not None:
+                b = rPr.find('./w:b', namespaces=ns)
+                if b is not None:
+                    b_val = b.get(f'{{{ns["w"]}}}val')
+                    if b_val is None or b_val in ['1', 'true', 'on']:
+                        return True
+                bCs = rPr.find('./w:bCs', namespaces=ns)
+                if bCs is not None:
+                    bCs_val = bCs.get(f'{{{ns["w"]}}}val')
+                    if bCs_val is None or bCs_val in ['1', 'true', 'on']:
+                        return True
+            if style.based_on:
+                return is_style_bold(style.based_on)
+            return False
+        
+        style_bold = False
+        if para.style:
+            style_bold = is_style_bold(para.style)
+        
+        for run in para.runs:
+            if run.text.strip():
+                r_elem = run._element
+                rPr = r_elem.find('./w:rPr', namespaces=ns)
+                if rPr is not None:
+                    sz = rPr.find('./w:sz', namespaces=ns)
+                    rFonts = rPr.find('./w:rFonts', namespaces=ns)
+                    b = rPr.find('./w:b', namespaces=ns)
+                    
+                    if sz is not None and not sz_printed:
+                        sz_printed = True
+                        sz_val = float(sz.get(f'{{{ns["w"]}}}val')) / 2.0
+                        if abs(sz_val - expected_font_size) < 0.1:
+                            size_name = '小3号' if is_h1 else '4号'
+                            print(f'  ✅ 字体大小: {sz_val:.1f} 磅 ({size_name})')
+                        else:
+                            size_name = '小3号' if is_h1 else '4号'
+                            errors.append({
+                                'paragraph': i + 1,
+                                'text': text,
+                                'heading_level': heading_level,
+                                'type': '字体大小错误',
+                                'actual': f'{sz_val:.1f} 磅',
+                                'expected': f'{expected_font_size:.1f} 磅 ({size_name})'
+                            })
+                            print(f'  ❌ 字体大小: {sz_val:.1f} 磅 (期望: {expected_font_size:.1f} 磅 {size_name})')
+                    
+                    if rFonts is not None and not eastAsia_printed:
+                        eastAsia = rFonts.get(f'{{{ns["w"]}}}eastAsia')
+                        if eastAsia:
+                            eastAsia_printed = True
+                            if eastAsia == '黑体':
+                                font_ok = True
+                                print(f'  ✅ 中文字体: 黑体')
+                            else:
+                                errors.append({
+                                    'paragraph': i + 1,
+                                    'text': text,
+                                    'heading_level': heading_level,
+                                    'type': '中文字体错误',
+                                    'actual': eastAsia,
+                                    'expected': '黑体'
+                                })
+                                print(f'  ❌ 中文字体: {eastAsia} (期望: 黑体)')
+                    
+                    if not bold_printed:
+                        bold_printed = True
+                        is_bold = style_bold
+                        if b is not None:
+                            b_val = b.get(f'{{{ns["w"]}}}val')
+                            if b_val is None or b_val in ['1', 'true', 'on']:
+                                is_bold = True
+                            elif b_val in ['0', 'false', 'off']:
+                                is_bold = False
+                        bCs = rPr.find('./w:bCs', namespaces=ns)
+                        if bCs is not None:
+                            bCs_val = bCs.get(f'{{{ns["w"]}}}val')
+                            if bCs_val is None or bCs_val in ['1', 'true', 'on']:
+                                is_bold = True
+                        if is_bold:
+                            bold_ok = True
+                            print(f'  ✅ 加粗: 是')
+                        else:
+                            errors.append({
+                                'paragraph': i + 1,
+                                'text': text,
+                                'heading_level': heading_level,
+                                'type': '加粗错误',
+                                'actual': '否',
+                                'expected': '是'
+                            })
+                            print(f'  ❌ 加粗: 否 (期望: 是)')
+    
+    if errors:
+        print(f'\n发现 {len(errors)} 个正文标题格式问题:\n')
+        for i, error in enumerate(errors, 1):
+            print(f'\n{i}. 段落 {error["paragraph"]} ({error["heading_level"]}):')
+            print(f'   内容: {error["text"]}')
+            print(f'   类型: {error["type"]}')
+            print(f'   实际: {error["actual"]}')
+            print(f'   期望: {error["expected"]}')
+        return False
+    else:
+        print(f'\n✅ 所有正文标题格式检查通过！')
+        return True
+
+
 def check_reference_superscript(doc):
     print('\n' + '=' * 80)
     print('【参考文献引用上标检测】')
@@ -1350,9 +1924,10 @@ def main():
             sys.exit(1)
     else:
         docx_files = glob.glob('*.docx')
+        docx_files = [f for f in docx_files if not os.path.basename(f).startswith('~$')]
         if not docx_files:
             print('错误: 当前目录下未找到 .docx 文件')
-            print('使用方法: python check_all.py [文档路径]')
+            print('使用方法: python main.py [文档路径]')
             sys.exit(1)
         docx_file = docx_files[0]
     
@@ -1370,6 +1945,11 @@ def main():
     lines_ok = check_empty_lines(doc)
     superscript_ok = check_reference_superscript(doc)
     spacing_after_ok = check_paragraph_spacing_after(doc)
+    body_font_ok = check_body_font_size(doc)
+    table_font_ok = check_table_figure_font(doc)
+    ref_count_ok = check_reference_count(doc)
+    special_headings_ok = check_special_headings(doc)
+    body_headings_ok = check_body_headings(doc)
     
     print('\n' + '=' * 80)
     print('【总体检测结果】')
@@ -1383,9 +1963,14 @@ def main():
     print(f'段后空行检测: {"✅ 通过" if lines_ok else "❌ 存在问题"}')
     print(f'参考文献上标检测: {"✅ 通过" if superscript_ok else "❌ 存在问题"}')
     print(f'段落段后间距: {"✅ 通过" if spacing_after_ok else "❌ 存在问题"}')
+    print(f'正文字体行距检测: {"✅ 通过" if body_font_ok else "❌ 存在问题"}')
+    print(f'表格插图字体检测: {"✅ 通过" if table_font_ok else "❌ 存在问题"}')
+    print(f'参考文献数量检测: {"✅ 通过" if ref_count_ok else "❌ 存在问题"}')
+    print(f'特殊标题格式检测: {"✅ 通过" if special_headings_ok else "❌ 存在问题"}')
+    print(f'正文标题格式检测: {"✅ 通过" if body_headings_ok else "❌ 存在问题"}')
     print('\n' + '=' * 80)
     
-    if fig_ok and ref_ok and indent_ok and font_ok and toc_heading1_ok and keywords_ok and lines_ok and superscript_ok and spacing_after_ok:
+    if fig_ok and ref_ok and indent_ok and font_ok and toc_heading1_ok and keywords_ok and lines_ok and superscript_ok and spacing_after_ok and body_font_ok and table_font_ok and ref_count_ok and special_headings_ok and body_headings_ok:
         print('🎉 所有检测项目均通过！')
     else:
         print('⚠️  部分检测项目存在问题，请查看上方详细信息')
