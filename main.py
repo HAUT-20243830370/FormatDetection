@@ -154,7 +154,7 @@ def check_figure_numbering(doc):
 
 def check_references(doc):
     print('\n' + '=' * 80)
-    print('【参考文献格式检测】')
+    print('【GB/T 7714—2015参考文献格式检测】')
     print('=' * 80)
     
     in_references = False
@@ -204,56 +204,127 @@ def check_references(doc):
                     'content': ref_content,
                     'full_text': text
                 })
+            else:
+                has_ref_marker = False
+                for marker in ['[J]', '[D]', '[M]', '[N]', '[P]', '[S]', '[EB/OL]']:
+                    if marker in text:
+                        has_ref_marker = True
+                        break
+                
+                if has_ref_marker:
+                    ref_num = len(references) + 1
+                    references.append({
+                        'number': ref_num,
+                        'paragraph': i + 1,
+                        'content': text,
+                        'full_text': text
+                    })
+                else:
+                    continue
+            
+            if len(references) > 0:
+                ref_info = references[-1]
+                ref_num = ref_info['number']
+                ref_content = ref_info['content']
                 
                 ref_type = None
+                
                 if '[J]' in ref_content:
                     ref_type = '期刊文章'
-                    if not re.search(r'\[J\]\s*[.。]', ref_content):
+                    print(f'[{ref_num}] {ref_type}: {ref_content[:60]}...')
+                    
+                    if not re.search(r'\[J\]\.', ref_content):
                         errors.append({
                             'type': '格式错误',
                             'number': ref_num,
                             'paragraph': i + 1,
                             'content': text,
-                            'message': '[J]后应该使用点号分隔'
+                            'message': '期刊文章格式：[J]后应直接跟英文句号，应为 [J].'
                         })
-                    if '.' in ref_content and '。' not in ref_content:
-                        warnings.append({
-                            'type': '标点建议',
+                    
+                    if re.search(r'\[J\]。', ref_content):
+                        errors.append({
+                            'type': '格式错误',
                             'number': ref_num,
                             'paragraph': i + 1,
                             'content': text,
-                            'message': '建议使用中文句号(。)而非英文句号(.)'
+                            'message': '期刊文章格式：不应使用中文句号，应为英文句号 .'
                         })
+                    
+                    if re.search(r'，', ref_content):
+                        errors.append({
+                            'type': '格式错误',
+                            'number': ref_num,
+                            'paragraph': i + 1,
+                            'content': text,
+                            'message': '期刊文章格式：不应使用中文逗号，应为英文逗号 ,'
+                        })
+                
                 elif '[D]' in ref_content:
                     ref_type = '学位论文'
-                    if not re.search(r'\[D\]\s*[.。]', ref_content):
+                    print(f'[{ref_num}] {ref_type}: {ref_content[:60]}...')
+                    
+                    if not re.search(r'\[D\]\.', ref_content):
                         errors.append({
                             'type': '格式错误',
                             'number': ref_num,
                             'paragraph': i + 1,
                             'content': text,
-                            'message': '[D]后应该使用点号分隔'
+                            'message': '学位论文格式：[D]后应直接跟英文句号，应为 [D].'
                         })
+                    
+                    if re.search(r'\[D\]。', ref_content):
+                        errors.append({
+                            'type': '格式错误',
+                            'number': ref_num,
+                            'paragraph': i + 1,
+                            'content': text,
+                            'message': '学位论文格式：不应使用中文句号，应为英文句号 .'
+                        })
+                    
+                    if re.search(r'，', ref_content):
+                        errors.append({
+                            'type': '格式错误',
+                            'number': ref_num,
+                            'paragraph': i + 1,
+                            'content': text,
+                            'message': '学位论文格式：不应使用中文逗号，应为英文逗号 ,'
+                        })
+                
                 elif '[M]' in ref_content:
                     ref_type = '图书'
-                    if not re.search(r'\[M\]\s*[.。]', ref_content):
+                    print(f'[{ref_num}] {ref_type}: {ref_content[:60]}...')
+                    
+                    if not re.search(r'\[M\]\.', ref_content):
                         errors.append({
                             'type': '格式错误',
                             'number': ref_num,
                             'paragraph': i + 1,
                             'content': text,
-                            'message': '[M]后应该使用点号分隔'
+                            'message': '图书格式：[M]后应直接跟英文句号，应为 [M].'
                         })
-                    if '.' in ref_content and '。' not in ref_content:
-                        warnings.append({
-                            'type': '标点建议',
+                    
+                    if re.search(r'\[M\]。', ref_content):
+                        errors.append({
+                            'type': '格式错误',
                             'number': ref_num,
                             'paragraph': i + 1,
                             'content': text,
-                            'message': '建议使用中文句号(。)而非英文句号(.)'
+                            'message': '图书格式：不应使用中文句号，应为英文句号 .'
                         })
+                    
+                    if re.search(r'，', ref_content):
+                        errors.append({
+                            'type': '格式错误',
+                            'number': ref_num,
+                            'paragraph': i + 1,
+                            'content': text,
+                            'message': '图书格式：不应使用中文逗号，应为英文逗号 ,'
+                        })
+                
                 else:
                     ref_type = '其他类型'
+                    print(f'[{ref_num}] {ref_type}: {ref_content[:60]}...')
                     if not re.search(r'\[.*?\]', ref_content):
                         errors.append({
                             'type': '缺少文献类型标识',
@@ -262,8 +333,6 @@ def check_references(doc):
                             'content': text,
                             'message': '缺少文献类型标识([J]/[D]/[M]等)'
                         })
-                
-                print(f'[{ref_num}] {ref_type}: {ref_content[:60]}...')
     
     if references:
         ref_numbers = [ref['number'] for ref in references]
@@ -281,10 +350,19 @@ def check_references(doc):
             })
         
         if listed_but_not_cited:
-            warnings.append({
-                'type': '未被引用',
-                'message': f'参考文献列表中有但正文未引用: {listed_but_not_cited}'
-            })
+            print(f'\n发现 {len(listed_but_not_cited)} 个未被引用的参考文献:')
+            for ref_num in listed_but_not_cited:
+                ref_info = next((ref for ref in references if ref['number'] == ref_num), None)
+                if ref_info:
+                    print(f'\n  [{ref_num}] 段落 {ref_info["paragraph"]}:')
+                    print(f'    内容: {ref_info["full_text"]}')
+                    errors.append({
+                        'type': '未被引用',
+                        'number': ref_num,
+                        'paragraph': ref_info['paragraph'],
+                        'content': ref_info['full_text'],
+                        'message': f'参考文献 [{ref_num}] 在正文中未被引用'
+                    })
         
         if citation_order:
             print(f'\n正文引用顺序: {citation_order}')
@@ -316,7 +394,7 @@ def check_references(doc):
                 print(f'   内容: {error["content"][:80]}...')
             print(f'   说明: {error["message"]}')
     else:
-        print('\n✅ 参考文献格式检查通过！')
+        print('\n✅ GB/T 7714—2015参考文献格式检查通过！')
     
     if warnings:
         print('\n⚠️  建议:')
@@ -329,6 +407,126 @@ def check_references(doc):
             print(f'   说明: {warning["message"]}')
     
     return len(errors) == 0
+
+
+def check_reference_crossref(doc):
+    print('\n' + '=' * 80)
+    print('【参考文献交叉引用检测】')
+    print('=' * 80)
+    
+    import re
+    ns = {'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'}
+    
+    in_references = False
+    references = []
+    citations = set()
+    citation_details = {}
+    
+    citation_pattern = re.compile(r'\[(\d+)\]')
+    ref_number_pattern = re.compile(r'^\[(\d+)\]\s*')
+    
+    for i, para in enumerate(doc.paragraphs):
+        text = para.text.strip()
+        
+        if not in_references:
+            if ('参考文献' in text or '参 考 文 献' in text) and len(text) < 20:
+                in_references = True
+                print(f'\n找到参考文献标题 (段落 {i+1}): {text}')
+                continue
+            
+            matches = citation_pattern.findall(text)
+            for match in matches:
+                ref_num = int(match)
+                citations.add(ref_num)
+                
+                if ref_num not in citation_details:
+                    citation_details[ref_num] = []
+                
+                has_hyperlink = False
+                has_instrtext = False
+                
+                para_elem = para._element
+                hyperlinks = para_elem.findall('.//w:hyperlink', namespaces=ns)
+                if hyperlinks:
+                    has_hyperlink = True
+                
+                instrtexts = para_elem.findall('.//w:instrText', namespaces=ns)
+                for instr in instrtexts:
+                    if instr.text and ('REF' in instr.text or 'PAGEREF' in instr.text):
+                        has_instrtext = True
+                        break
+                
+                citation_details[ref_num].append({
+                    'paragraph': i + 1,
+                    'text': text[:60] + '...' if len(text) > 60 else text,
+                    'has_hyperlink': has_hyperlink,
+                    'has_instrtext': has_instrtext
+                })
+        else:
+            if (text.startswith('致谢') or text.startswith('致 谢') or 
+                text.startswith('结 论') or text.startswith('结论')):
+                print(f'\n遇到结束标记，停止检测 (段落 {i+1}): {text}')
+                break
+            
+            if not text:
+                continue
+            
+            ref_match = ref_number_pattern.match(text)
+            if ref_match:
+                ref_num = int(ref_match.group(1))
+                references.append(ref_num)
+            else:
+                has_ref_marker = False
+                for marker in ['[J]', '[D]', '[M]', '[N]', '[P]', '[S]', '[EB/OL]']:
+                    if marker in text:
+                        has_ref_marker = True
+                        break
+                if has_ref_marker:
+                    ref_num = len(references) + 1
+                    references.append(ref_num)
+    
+    print(f'\n正文中引用的参考文献: {sorted(citations)}')
+    print(f'参考文献列表中的文献: {sorted(references)}')
+    
+    errors = []
+    all_cited_ok = True
+    
+    for ref_num in sorted(citations):
+        if ref_num not in citation_details:
+            continue
+        
+        details = citation_details[ref_num]
+        all_crossref_ok = True
+        
+        for j, detail in enumerate(details):
+            if not detail['has_hyperlink'] and not detail['has_instrtext']:
+                all_crossref_ok = False
+                all_cited_ok = False
+                errors.append({
+                    'type': '缺少交叉引用',
+                    'number': ref_num,
+                    'paragraph': detail['paragraph'],
+                    'content': detail['text'],
+                    'message': f'参考文献 [{ref_num}] 的第 {j+1} 次引用未设置交叉引用'
+                })
+        
+        if all_crossref_ok:
+            print(f'\n[{ref_num}] ✅ 所有引用均已设置交叉引用')
+        else:
+            print(f'\n[{ref_num}] ❌ 部分引用未设置交叉引用')
+    
+    if errors:
+        print('\n发现的问题:')
+        for i, error in enumerate(errors, 1):
+            print(f'\n{i}. [{error["type"]}]')
+            print(f'   参考文献: [{error["number"]}]')
+            print(f'   段落: {error["paragraph"]}')
+            print(f'   内容: {error["content"]}')
+            print(f'   说明: {error["message"]}')
+    else:
+        print('\n✅ 所有参考文献引用均已设置交叉引用！')
+    
+    return all_cited_ok
 
 
 def check_indent(doc):
@@ -373,8 +571,7 @@ def check_indent(doc):
             text.startswith('致 谢') or text.startswith('致谢') or
             text.startswith('目 次') or text.startswith('目次') or
             text.startswith('结 论') or text.startswith('结论') or
-            text.startswith('摘  要') or text.startswith('目   次') or
-            text.startswith('主要可视化图表')):
+            text.startswith('摘  要') or text.startswith('目   次')):
             continue
         
         if text.startswith('图 ') or text.startswith('表 ') or re.match(r'^\d+\.\d+', text):
@@ -385,15 +582,21 @@ def check_indent(doc):
         
         total_chinese_paras += 1
         
-        para_format = para.paragraph_format
-        first_line_indent = para_format.first_line_indent
         indent_value = 0.0
+        para_elem = para._element
+        ns = {'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'}
+        pPr = para_elem.find('./w:pPr', namespaces=ns)
         
-        if first_line_indent is not None:
-            indent_emus = first_line_indent
-            indent_value = indent_emus / 152400
-        else:
-            indent_value = 0.0
+        if pPr is not None:
+            ind = pPr.find('./w:ind', namespaces=ns)
+            if ind is not None:
+                first_line_chars = ind.get(f'{{{ns["w"]}}}firstLineChars')
+                if first_line_chars is not None:
+                    indent_value = int(first_line_chars) / 100.0
+                else:
+                    first_line = ind.get(f'{{{ns["w"]}}}firstLine')
+                    if first_line is not None:
+                        indent_value = int(first_line) / 152400
         
         expected_indent = 2.0
         tolerance = 0.5
@@ -455,7 +658,7 @@ def check_chinese_font(doc):
                 eastAsia = rFonts.get(f'{{{ns["w"]}}}eastAsia')
                 if eastAsia:
                     return eastAsia
-        based_on = style.based_on
+        based_on = getattr(style, 'based_on', None)
         if based_on:
             return get_eastasia_font_from_style(based_on, ns)
         return None
@@ -483,7 +686,7 @@ def check_chinese_font(doc):
         font = get_font_from_element(style_elem, ns)
         if font:
             return font
-        based_on = style.based_on
+        based_on = getattr(style, 'based_on', None)
         if based_on:
             return get_font_from_style(based_on, ns)
         return None
@@ -580,8 +783,7 @@ def check_chinese_font(doc):
             text.startswith('致 谢') or text.startswith('致谢') or
             text.startswith('目 次') or text.startswith('目次') or
             text.startswith('结 论') or text.startswith('结论') or
-            text.startswith('摘  要') or text.startswith('目   次') or
-            text.startswith('主要可视化图表')):
+            text.startswith('摘  要') or text.startswith('目   次')):
             continue
         
         if text.startswith('图 ') or text.startswith('表 ') or re.match(r'^\d+\.\d+', text):
@@ -691,7 +893,7 @@ def check_toc_heading1_font(doc):
                 eastAsia = rFonts.get(f'{{{ns["w"]}}}eastAsia')
                 if eastAsia:
                     return eastAsia
-        based_on = style.based_on
+        based_on = getattr(style, 'based_on', None)
         if based_on:
             return get_eastasia_font_from_style(based_on, ns)
         return None
@@ -707,7 +909,7 @@ def check_toc_heading1_font(doc):
                 ascii_font = rFonts.get(f'{{{ns["w"]}}}ascii')
                 if ascii_font:
                     return ascii_font
-        based_on = style.based_on
+        based_on = getattr(style, 'based_on', None)
         if based_on:
             return get_ascii_font_from_style(based_on, ns)
         return None
@@ -788,7 +990,7 @@ def check_toc_heading1_font(doc):
                         eastAsia = rFonts.get(f'{{{ns["w"]}}}eastAsia')
                         ascii_font = rFonts.get(f'{{{ns["w"]}}}ascii')
                         return eastAsia, ascii_font
-                based_on = style.based_on
+                based_on = getattr(style, 'based_on', None)
                 if based_on:
                     return get_fonts_from_based_on_style(based_on, ns)
                 return None, None
@@ -939,8 +1141,7 @@ def check_paragraph_spacing_after(doc):
             text.startswith('致 谢') or text.startswith('致谢') or
             text.startswith('目 次') or text.startswith('目次') or
             text.startswith('结 论') or text.startswith('结论') or
-            text.startswith('摘  要') or text.startswith('目   次') or
-            text.startswith('主要可视化图表')):
+            text.startswith('摘  要') or text.startswith('目   次')):
             continue
         
         if text.startswith('图 ') or text.startswith('表 ') or re.match(r'^\d+\.\d+', text):
@@ -1027,7 +1228,7 @@ def check_body_font_size(doc):
             text.startswith('参考文献') or text.startswith('参 考 文 献') or
             text.startswith('致 谢') or text.startswith('致谢') or
             text.startswith('结 论') or text.startswith('结论') or
-            text.startswith('摘  要') or text.startswith('主要可视化图表')):
+            text.startswith('摘  要') or text.startswith('目   次')):
             continue
         
         if text.startswith('图 ') or text.startswith('表 ') or re.match(r'^\d+\.\d+', text):
@@ -1211,22 +1412,69 @@ def check_reference_count(doc):
     
     reference_count = 0
     in_references = False
+    ref_number_pattern = re.compile(r'^\[(\d+)\]\s*')
+    references_found = []
     
     for i, para in enumerate(doc.paragraphs):
         text = para.text.strip()
         
-        if '参考文献' in text or '参 考 文 献' in text:
-            in_references = True
-            continue
-        
-        if in_references:
-            if re.match(r'^\[\d+\]', text):
-                reference_count += 1
-            
-            if text.startswith('致谢') or text.startswith('致 谢') or text.startswith('结 论') or text.startswith('结论'):
+        if not in_references:
+            if '参考文献' in text or '参 考 文 献' in text:
+                if len(text) < 20:
+                    in_references = True
+                    print(f'\n找到参考文献标题 (段落 {i+1}): {text}')
+                    continue
+        else:
+            if (text.startswith('致谢') or text.startswith('致 谢') or 
+                text.startswith('结 论') or text.startswith('结论')):
+                print(f'\n遇到结束标记，停止检测 (段落 {i+1}): {text}')
                 break
+            
+            if not text:
+                continue
+            
+            ref_match = ref_number_pattern.match(text)
+            if ref_match:
+                reference_count += 1
+                ref_num = int(ref_match.group(1))
+                references_found.append({
+                    'number': ref_num,
+                    'paragraph': i + 1,
+                    'content': text
+                })
+                print(f'[{ref_num}] 段落 {i+1}: {text[:60]}...')
+            else:
+                has_ref_marker = False
+                for marker in ['[J]', '[D]', '[M]', '[N]', '[P]', '[S]', '[EB/OL]']:
+                    if marker in text:
+                        has_ref_marker = True
+                        break
+                
+                if has_ref_marker:
+                    reference_count += 1
+                    references_found.append({
+                        'number': reference_count,
+                        'paragraph': i + 1,
+                        'content': text
+                    })
+                    print(f'[{reference_count}] 段落 {i+1}: {text[:60]}...')
     
     print(f'\n找到参考文献数量: {reference_count}')
+    
+    if references_found:
+        print(f'\n已识别的参考文献编号: {[ref["number"] for ref in references_found]}')
+        
+        expected_num = 1
+        missing_refs = []
+        for ref in references_found:
+            if ref['number'] != expected_num:
+                while expected_num < ref['number']:
+                    missing_refs.append(expected_num)
+                    expected_num += 1
+            expected_num += 1
+        
+        if missing_refs:
+            print(f'⚠️  发现缺失的参考文献编号: {missing_refs}')
     
     if reference_count >= 6:
         print(f'✅ 参考文献数量检查通过！')
@@ -1637,6 +1885,76 @@ def check_reference_superscript(doc):
     return len(errors) == 0
 
 
+def check_reference_hyperlink(doc):
+    print('\n' + '=' * 80)
+    print('【参考文献引用交叉引用/超链接检测】')
+    print('=' * 80)
+    
+    errors = []
+    ns = {'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main',
+          'r': 'http://schemas.openxmlformats.org/officeDocument/2006/relationships'}
+    
+    import re
+    
+    root = doc.element.body
+    for i, p_elem in enumerate(root.findall('.//w:p', namespaces=ns)):
+        text_parts = []
+        for t in p_elem.findall('.//w:t', namespaces=ns):
+            if t.text:
+                text_parts.append(t.text)
+        text = ''.join(text_parts)
+        
+        if re.search(r'\[\d+\]', text):
+            if re.match(r'^\[\d+\]\s', text.strip()):
+                continue
+            
+            found_valid_link = False
+            
+            # 检查超链接
+            hyperlink_elems = p_elem.findall('.//w:hyperlink', namespaces=ns)
+            if hyperlink_elems:
+                for hyperlink_elem in hyperlink_elems:
+                    text_elems = hyperlink_elem.findall('.//w:t', namespaces=ns)
+                    hyperlink_text = ''.join([t.text for t in text_elems if t.text])
+                    
+                    if re.search(r'\[\d+\]', hyperlink_text):
+                        rid = hyperlink_elem.get(f'{{{ns["r"]}}}id')
+                        if rid:
+                            found_valid_link = True
+            
+            # 检查交叉引用（域代码）
+            if not found_valid_link:
+                fld_simple = p_elem.findall('.//w:fldSimple', namespaces=ns)
+                fld_char = p_elem.findall('.//w:fldChar', namespaces=ns)
+                instr_text = p_elem.findall('.//w:instrText', namespaces=ns)
+                
+                if fld_simple or fld_char or instr_text:
+                    for it in instr_text:
+                        if it.text and ('REF' in it.text or 'PAGEREF' in it.text or 'NOTEREF' in it.text):
+                            found_valid_link = True
+                            break
+            
+            if not found_valid_link:
+                errors.append({
+                    'paragraph': i + 1,
+                    'text': text[:100],
+                    'type': '缺少交叉引用或超链接',
+                    'message': '参考文献引用未设置交叉引用或超链接'
+                })
+    
+    if errors:
+        print(f'\n发现 {len(errors)} 个参考文献引用问题:\n')
+        for i, error in enumerate(errors, 1):
+            print(f'\n{i}. 段落 {error["paragraph"]}:')
+            print(f'   内容: {error["text"]}...')
+            print(f'   类型: {error["type"]}')
+            print(f'   说明: {error["message"]}')
+    else:
+        print(f'\n✅ 所有参考文献引用交叉引用/超链接检查通过！')
+    
+    return len(errors) == 0
+
+
 def check_keywords(doc):
     print('\n' + '=' * 80)
     print('【关键词格式检测】')
@@ -1659,7 +1977,7 @@ def check_keywords(doc):
                 eastAsia = rFonts.get(f'{{{ns["w"]}}}eastAsia')
                 if eastAsia:
                     return eastAsia
-        based_on = style.based_on
+        based_on = getattr(style, 'based_on', None)
         if based_on:
             return get_eastasia_font_from_style(based_on, ns)
         return None
@@ -1830,8 +2148,7 @@ def check_empty_lines(doc):
             text.startswith('致 谢') or text.startswith('致谢') or
             text.startswith('目 次') or text.startswith('目次') or
             text.startswith('结 论') or text.startswith('结论') or
-            text.startswith('摘  要') or text.startswith('目   次') or
-            text.startswith('主要可视化图表')):
+            text.startswith('摘  要') or text.startswith('目   次')):
             is_check_para = False
         
         if text.startswith('图 ') or text.startswith('表 ') or re.match(r'^\d+\.\d+', text):
@@ -1950,6 +2267,7 @@ def main():
     ref_count_ok = check_reference_count(doc)
     special_headings_ok = check_special_headings(doc)
     body_headings_ok = check_body_headings(doc)
+    ref_crossref_ok = check_reference_crossref(doc)
     
     print('\n' + '=' * 80)
     print('【总体检测结果】')
@@ -1968,9 +2286,10 @@ def main():
     print(f'参考文献数量检测: {"✅ 通过" if ref_count_ok else "❌ 存在问题"}')
     print(f'特殊标题格式检测: {"✅ 通过" if special_headings_ok else "❌ 存在问题"}')
     print(f'正文标题格式检测: {"✅ 通过" if body_headings_ok else "❌ 存在问题"}')
+    print(f'参考文献交叉引用检测: {"✅ 通过" if ref_crossref_ok else "❌ 存在问题"}')
     print('\n' + '=' * 80)
     
-    if fig_ok and ref_ok and indent_ok and font_ok and toc_heading1_ok and keywords_ok and lines_ok and superscript_ok and spacing_after_ok and body_font_ok and table_font_ok and ref_count_ok and special_headings_ok and body_headings_ok:
+    if fig_ok and ref_ok and indent_ok and font_ok and toc_heading1_ok and keywords_ok and lines_ok and superscript_ok and spacing_after_ok and body_font_ok and table_font_ok and ref_count_ok and special_headings_ok and body_headings_ok and ref_crossref_ok:
         print('🎉 所有检测项目均通过！')
     else:
         print('⚠️  部分检测项目存在问题，请查看上方详细信息')
